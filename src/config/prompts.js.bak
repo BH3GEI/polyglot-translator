@@ -1,0 +1,57 @@
+import { zhPrompts } from './prompts/zh';
+import { jaPrompts } from './prompts/ja';
+
+// 语言配置
+export const languageConfig = {
+  zh: {
+    nativeName: '中文',
+    prompts: zhPrompts
+  },
+  ja: {
+    nativeName: '日本語',
+    prompts: jaPrompts
+  }
+  // 可以继续添加其他语言...
+};
+
+// 获取用户界面语言的prompts
+export function getPromptsForLanguage(language) {
+  return languageConfig[language]?.prompts;
+}
+
+// 获取翻译提示
+export function getTranslationPrompt(text, sourceLanguage, targetLanguage, userNativeLanguage = 'zh') {
+  const prompts = getPromptsForLanguage(userNativeLanguage);
+  if (!prompts) {
+    // 如果用户的母语prompts不存在，默认使用中文
+    return zhPrompts.basicTranslation.replace('{text}', text);
+  }
+  return prompts.basicTranslation.replace('{text}', text);
+}
+
+// 获取发音分析提示
+export function getPronunciationAnalysisPrompt(text, language, userNativeLanguage = 'zh') {
+  const prompts = getPromptsForLanguage(userNativeLanguage);
+  if (!prompts) {
+    return zhPrompts.pronunciationAnalysis.replace('{text}', text);
+  }
+  return prompts.pronunciationAnalysis.replace('{text}', text);
+}
+
+// 获取语法分析提示
+export function getGrammarAnalysisPrompt(text, language, userNativeLanguage = 'zh') {
+  const prompts = getPromptsForLanguage(userNativeLanguage);
+  if (!prompts) {
+    return zhPrompts.grammarAnalysis.replace('{text}', text);
+  }
+  return prompts.grammarAnalysis.replace('{text}', text);
+}
+
+// 获取用法分析提示
+export function getUsageAnalysisPrompt(text, language, userNativeLanguage = 'zh') {
+  const prompts = getPromptsForLanguage(userNativeLanguage);
+  if (!prompts) {
+    return zhPrompts.usageAnalysis.replace('{text}', text);
+  }
+  return prompts.usageAnalysis.replace('{text}', text);
+}

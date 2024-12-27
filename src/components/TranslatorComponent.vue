@@ -3,10 +3,10 @@
     <!-- 输入部分 -->
     <el-card class="input-card">
       <el-input
-        v-model="inputText"
+        v-model="data.inputText"
         type="textarea"
         :rows="4"
-        :placeholder="'请输入要翻译的文本'"
+        :placeholder="'Please enter the text to translate'"
         resize="none"
       >
         <template #append>
@@ -17,31 +17,60 @@
       </el-input>
 
       <div class="language-controls">
-        <div class="detected-language" v-if="detectedLanguage">
-          检测到语言: {{ getLanguageLabel(detectedLanguage) }}
+        <!-- 用户母语选择 -->
+        <div class="language-selection-row">
+          <div class="native-language">
+            <label>{{ getInterfaceText('nativeLanguage') }}</label>
+            <el-select 
+              v-model="data.userNativeLanguage" 
+              :placeholder="getInterfaceText('selectNativeLanguage')"
+              class="language-select"
+              @change="updateUserNativeLanguage"
+            >
+              <el-option
+                v-for="lang in availableLanguages"
+                :key="lang.value"
+                :label="lang.label"
+                :value="lang.value"
+              />
+            </el-select>
+          </div>
+
+          <div class="source-language">
+            <label>{{ getInterfaceText('sourceLanguage') }}</label>
+            <el-select 
+              v-model="data.selectedLanguage" 
+              :placeholder="getInterfaceText('selectSourceLanguage')"
+              clearable
+              class="language-select"
+            >
+              <el-option
+                v-for="lang in availableLanguages"
+                :key="lang.value"
+                :label="lang.label"
+                :value="lang.value"
+              />
+            </el-select>
+          </div>
+        </div>
+
+        <!-- 检测到的语言 -->
+        <div class="detected-language" v-if="data.detectedLanguage">
+          {{ getInterfaceText('detectedLanguage') }}: {{ getLanguageLabel(data.detectedLanguage) }}
           <el-button type="text" @click="useDetectedLanguage">
-            全部勾选
+            {{ getInterfaceText('selectAll') }}
           </el-button>
         </div>
-        <el-select 
-          v-model="selectedLanguage" 
-          placeholder="选择源语言"
-          clearable
-        >
-          <el-option
-            v-for="lang in availableLanguages"
-            :key="lang.value"
-            :label="lang.label"
-            :value="lang.value"
-          />
-        </el-select>
 
+        <!-- 目标语言选择 -->
         <div class="target-languages">
-          <el-checkbox-group v-model="targetLanguages">
-            <el-checkbox v-for="lang in availableLanguages" 
-                        :key="lang.value" 
-                        :label="lang.value"
-                        :disabled="lang.value === selectedLanguage"
+          <label>{{ getInterfaceText('targetLanguages') }}</label>
+          <el-checkbox-group v-model="data.targetLanguages" class="language-checkbox-group">
+            <el-checkbox 
+              v-for="lang in availableLanguages" 
+              :key="lang.value" 
+              :label="lang.value"
+              class="language-checkbox"
             >
               {{ lang.label }}
             </el-checkbox>
@@ -52,18 +81,18 @@
       <el-button 
         type="primary" 
         @click="translate" 
-        :loading="translating"
-        :disabled="!inputText || (!selectedLanguage && !detectedLanguage) || targetLanguages.length === 0"
+        :loading="data.translating"
+        :disabled="!data.inputText || (!data.selectedLanguage && !data.detectedLanguage) || data.targetLanguages.length === 0"
         class="translate-button"
       >
-        翻译
+        {{ data.userNativeLanguage === 'ja' ? '翻訳' : '翻译' }}
       </el-button>
     </el-card>
 
     <!-- 翻译进度 -->
-    <div v-if="translating" class="translation-progress">
+    <div v-if="data.translating" class="translation-progress">
       <el-progress 
-        :percentage="translationProgress" 
+        :percentage="data.translationProgress" 
         :format="progressFormat"
         :stroke-width="15"
         status="success"
@@ -71,156 +100,134 @@
     </div>
 
     <!-- 翻译结果 -->
-    <div v-if="showResults" class="results-grid">
-      <el-card v-for="result in translationResults" :key="result.lang" class="result-card">
+    <div v-if="data.showResults" class="results-grid">
+      <el-card v-for="result in data.translationResults" :key="result.lang" class="result-card">
         <div class="result-header">
           <h3>{{ getLanguageLabel(result.lang) }}</h3>
           <div class="result-actions">
             <el-button 
-              v-if="result.data?.rawResponses"
+              v-if="result.data"
               type="text"
-              @click="showRawResponse(result.data.rawResponses)"
+              @click="showRawResponse(result.data)"
             >
-              查看AI分析
+              {{ data.userNativeLanguage === 'ja' ? '' : '' }}
             </el-button>
-            <el-tag v-if="result.loading" type="info">翻译中...</el-tag>
+            <el-tag v-if="result.loading" type="info">
+              {{ data.userNativeLanguage === 'ja' ? '翻訳中...' : '翻译中...' }}
+            </el-tag>
             <el-tag v-else-if="result.error" type="danger">{{ result.error }}</el-tag>
           </div>
         </div>
 
         <template v-if="result.data">
           <!-- 基本翻译 -->
-          <div class="translation-text">{{ result.data.text }}</div>
-
-          <!-- 翻译分析 -->
-          <div v-if="result.data.analysis" class="translation-analysis">
-            <h4>翻译分析</h4>
-            <el-descriptions :column="1" border>
-              <el-descriptions-item v-if="result.data.analysis.meaning" label="词义/句意">
-                {{ result.data.analysis.meaning }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.analysis.context" label="使用场景">
-                {{ result.data.analysis.context }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.analysis.alternatives?.length" label="其他可能的翻译">
-                <ul class="alternatives-list">
-                  <li v-for="(alt, index) in result.data.analysis.alternatives" 
-                      :key="index">{{ alt }}</li>
-                </ul>
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.analysis.notes" label="翻译说明">
-                {{ result.data.analysis.notes }}
-              </el-descriptions-item>
-            </el-descriptions>
+          <div v-if="result.data.translations" class="translation-text">
+            <div v-for="(translation, index) in result.data.translations" :key="index" class="translation-item">
+              <div class="main-translation">
+                <h2>{{ translation.text }}</h2>
+                <!-- 日语注音支持 -->
+                <div v-if="result.lang === 'ja'" class="japanese-reading">
+                  <div v-if="translation.text.match(/[ぁ-んァ-ン]/)" class="japanese-text">
+                    <ruby v-for="(char, idx) in translation.text" :key="idx">
+                      {{ char }}
+                      <rt v-if="getFuriganaForChar(result.data.pronunciation?.annotations, idx)">
+                        {{ getFuriganaForChar(result.data.pronunciation?.annotations, idx) }}
+                      </rt>
+                    </ruby>
+                  </div>
+                  <div v-if="result.data.pronunciation?.romaji" class="romaji">
+                    {{ result.data.pronunciation.romaji }}
+                  </div>
+                </div>
+              </div>
+              <div class="translation-details">
+                <div class="part-of-speech"><strong>{{ getInterfaceText('partOfSpeech') }}：</strong>{{ translation.partOfSpeech }}</div>
+                <div class="meaning"><strong>{{ getInterfaceText('meaning') }}：</strong>{{ translation.meaning }}</div>
+                <div class="usage"><strong>{{ getInterfaceText('usage') }}：</strong>{{ translation.usage }}</div>
+                
+                <!-- 示例部分 -->
+                <div v-if="translation.examples && translation.examples.length" class="examples">
+                  <strong class="section-title">{{ getInterfaceText('examples') }}：</strong>
+                  <div v-for="(example, exIndex) in translation.examples" :key="exIndex" class="example-item">
+                    <div class="example-source">
+                      <strong>{{ getInterfaceText('original') }}：</strong>
+                      <span v-if="result.lang === 'ja'" class="japanese-example">
+                        <ruby v-for="(char, idx) in example.source" :key="idx">
+                          {{ char }}
+                          <rt v-if="getFuriganaForChar(example.annotations, idx)">
+                            {{ getFuriganaForChar(example.annotations, idx) }}
+                          </rt>
+                        </ruby>
+                      </span>
+                      <span v-else>{{ example.source }}</span>
+                    </div>
+                    <div class="example-target"><strong>{{ getInterfaceText('translation') }}：</strong>{{ example.target }}</div>
+                    <div class="example-explanation"><strong>{{ getInterfaceText('explanation') }}：</strong>{{ example.explanation }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 发音信息 -->
           <div v-if="result.data.pronunciation" class="pronunciation-info">
-            <h4>发音信息</h4>
+            <div class="pronunciation-header">
+              <strong class="section-title">{{ getInterfaceText('pronunciationGuide') }}</strong>
+            </div>
+            <div v-if="result.data.pronunciation.ipa" class="ipa">
+              <strong>{{ getInterfaceText('ipaSymbols') }}：</strong>
+              <span class="ipa-text">{{ result.data.pronunciation.ipa }}</span>
+            </div>
             <div v-if="result.data.pronunciation.native" class="native-pronunciation">
-              <strong>原文读音：</strong>{{ result.data.pronunciation.native }}
+              <strong>{{ getInterfaceText('pronunciation') }}：</strong>
+              <span class="pronunciation-text">{{ result.data.pronunciation.native }}</span>
             </div>
-            <div v-if="result.data.pronunciation.romanized" class="romanized-pronunciation">
-              <strong>罗马字/拼音：</strong>{{ result.data.pronunciation.romanized }}
+            <div v-if="result.data.pronunciation.romaji" class="romaji-pronunciation">
+              <strong>{{ getInterfaceText('romajiReading') }}：</strong>
+              <span class="romaji-text">{{ result.data.pronunciation.romaji }}</span>
             </div>
-            <div v-if="result.data.pronunciation.ipa" class="ipa-pronunciation">
-              <strong>国际音标：</strong>{{ result.data.pronunciation.ipa }}
-            </div>
-            <div v-if="result.data.pronunciation.intonation" class="intonation">
-              <strong>语调说明：</strong>{{ result.data.pronunciation.intonation }}
-            </div>
-            <div v-if="result.data.pronunciation.stress || result.data.pronunciation.stress_pattern" class="stress">
-              <strong>重音位置：</strong>{{ result.data.pronunciation.stress || result.data.pronunciation.stress_pattern }}
-            </div>
-            <div v-if="result.data.pronunciation.segmented" class="segmented-pronunciation">
-              <strong>分词发音：</strong>
-              <div v-for="(segment, index) in result.data.pronunciation.segmented" 
-                   :key="index" 
-                   class="word-segment"
-              >
-                <div class="word">{{ segment.word }}</div>
-                <div class="reading">{{ segment.reading || segment.pinyin }}</div>
-                <div v-if="segment.tone || segment.pitch_accent" class="tone">
-                  {{ segment.tone || segment.pitch_accent }}
-                </div>
-              </div>
+            <div v-if="result.data.pronunciation.englishRomaji" class="english-romaji-pronunciation">
+              <strong>{{ getInterfaceText('englishRomaji') }}：</strong>
+              <span class="english-romaji-text">{{ result.data.pronunciation.englishRomaji }}</span>
             </div>
             <div v-if="result.data.pronunciation.notes" class="pronunciation-notes">
-              <strong>发音要点：</strong>{{ result.data.pronunciation.notes }}
+              <strong>{{ getInterfaceText('pronunciationNotes') }}：</strong>
+              <span class="notes-text">{{ result.data.pronunciation.notes }}</span>
             </div>
           </div>
 
-          <!-- 语法分析 -->
-          <div v-if="result.data.grammar" class="grammar-analysis">
-            <h4>语法分析</h4>
-            <el-descriptions :column="1" border>
-              <el-descriptions-item v-if="result.data.grammar.structure" label="句子结构">
-                {{ result.data.grammar.structure }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.grammar.tense" label="时态">
-                {{ result.data.grammar.tense }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.grammar.mood" label="语气">
-                {{ result.data.grammar.mood }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.grammar.components?.length" label="句子成分">
-                <div v-for="(comp, index) in result.data.grammar.components" 
-                     :key="index" 
-                     class="grammar-component">
-                  <strong>{{ comp.type }}：</strong>
-                  {{ comp.content }}
-                  <div class="component-function">{{ comp.function }}</div>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.grammar.patterns?.length" label="语法模式">
-                <ul class="grammar-patterns">
-                  <li v-for="(pattern, index) in result.data.grammar.patterns" 
-                      :key="index">{{ pattern }}</li>
-                </ul>
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.grammar.notes" label="其他说明">
-                {{ result.data.grammar.notes }}
-              </el-descriptions-item>
-            </el-descriptions>
+          <!-- 同义词和反义词 -->
+          <div v-if="result.data.synonyms || result.data.antonyms" class="word-relations">
+            <div v-if="result.data.synonyms" class="synonyms">
+              <strong>{{ getInterfaceText('synonyms') }}：</strong>
+              <span class="synonym-list">{{ result.data.synonyms.join('、') }}</span>
+            </div>
+            <div v-if="result.data.antonyms" class="antonyms">
+              <strong>{{ getInterfaceText('antonyms') }}：</strong>
+              <span class="antonym-list">{{ result.data.antonyms.join('、') }}</span>
+            </div>
           </div>
 
-          <!-- 用法说明 -->
-          <div v-if="result.data.usage" class="usage-info">
-            <h4>用法说明</h4>
-            <el-descriptions :column="1" border>
-              <el-descriptions-item v-if="result.data.usage.register" label="使用场合">
-                {{ result.data.usage.register }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.usage.style" label="语体风格">
-                {{ result.data.usage.style }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.usage.context" label="使用场景">
-                {{ result.data.usage.context }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.usage.collocations?.length" label="常见搭配">
-                <div v-for="(colloc, index) in result.data.usage.collocations" 
-                     :key="index" 
-                     class="collocation-item">
-                  <div class="pattern">{{ colloc.pattern }}</div>
-                  <div class="example">示例：{{ colloc.example }}</div>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.usage.examples?.length" label="使用示例">
-                <div v-for="(example, index) in result.data.usage.examples" 
-                     :key="index" 
-                     class="example-item">
-                  <div class="example-text">{{ example.text }}</div>
-                  <div class="example-context">场景：{{ example.context }}</div>
-                  <div class="example-explanation">说明：{{ example.explanation }}</div>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.usage.cultural_notes" label="文化背景">
-                {{ result.data.usage.cultural_notes }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="result.data.usage.notes" label="其他说明">
-                {{ result.data.usage.notes }}
-              </el-descriptions-item>
-            </el-descriptions>
+          <!-- 附加信息 -->
+          <div v-if="result.data.additional_info" class="additional-info">
+            <div v-if="result.data.additional_info.etymology" class="etymology">
+              <strong>{{ getInterfaceText('etymology') }}：</strong>
+              <span class="etymology-text">{{ result.data.additional_info.etymology }}</span>
+            </div>
+            <div v-if="result.data.additional_info.register" class="register">
+              <strong>{{ getInterfaceText('register') }}：</strong>
+              <span class="register-text">{{ result.data.additional_info.register }}</span>
+            </div>
+            <div v-if="result.data.additional_info.cultural_notes" class="cultural-notes">
+              <strong>{{ getInterfaceText('culturalNotes') }}：</strong>
+              <span class="cultural-notes-text">{{ result.data.additional_info.cultural_notes }}</span>
+            </div>
+          </div>
+
+          <!-- 注释 -->
+          <div v-if="result.data.notes" class="translation-notes">
+            <strong>{{ getInterfaceText('notes') }}：</strong>
+            <span class="notes-text">{{ result.data.notes }}</span>
           </div>
         </template>
       </el-card>
@@ -228,24 +235,24 @@
 
     <!-- AI响应对话框 -->
     <el-dialog
-      v-model="showRawResponseDialog"
+      v-model="data.showRawResponseDialog"
       title="AI分析详情"
       width="80%"
       :close-on-click-modal="false"
     >
-      <div v-if="currentRawResponse" class="raw-response">
+      <div v-if="data.currentRawResponse" class="raw-response">
         <el-tabs>
-          <el-tab-pane v-if="currentRawResponse.basic" label="基本翻译">
-            <pre>{{ formatJSON(currentRawResponse.basic) }}</pre>
+          <el-tab-pane v-if="data.currentRawResponse.basic" label="基本翻译">
+            <pre>{{ formatJSON(data.currentRawResponse.basic) }}</pre>
           </el-tab-pane>
-          <el-tab-pane v-if="currentRawResponse.pronunciation" label="发音分析">
-            <pre>{{ formatJSON(currentRawResponse.pronunciation) }}</pre>
+          <el-tab-pane v-if="data.currentRawResponse.pronunciation" label="发音分析">
+            <pre>{{ formatJSON(data.currentRawResponse.pronunciation) }}</pre>
           </el-tab-pane>
-          <el-tab-pane v-if="currentRawResponse.grammar" label="语法分析">
-            <pre>{{ formatJSON(currentRawResponse.grammar) }}</pre>
+          <el-tab-pane v-if="data.currentRawResponse.grammar" label="语法分析">
+            <pre>{{ formatJSON(data.currentRawResponse.grammar) }}</pre>
           </el-tab-pane>
-          <el-tab-pane v-if="currentRawResponse.usage" label="用法分析">
-            <pre>{{ formatJSON(currentRawResponse.usage) }}</pre>
+          <el-tab-pane v-if="data.currentRawResponse.usage" label="用法分析">
+            <pre>{{ formatJSON(data.currentRawResponse.usage) }}</pre>
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -253,29 +260,29 @@
 
     <!-- API配置对话框 -->
     <el-dialog
-      v-model="showApiConfig"
-      title="API配置"
+      v-model="data.showApiConfig"
+      title="API Configuration"
       width="500px"
       class="modern-dialog"
       :close-on-click-modal="false"
     >
       <el-form>
-        <el-form-item label="API地址">
-          <el-input v-model="apiConfig.apiEndpoint" placeholder="请输入API地址" />
+        <el-form-item label="API Address">
+          <el-input v-model="data.apiConfig.apiEndpoint" placeholder="Please enter the API address" />
         </el-form-item>
-        <el-form-item label="模型名称">
-          <el-input v-model="apiConfig.model" placeholder="请输入模型名称" />
+        <el-form-item label="Model Name">
+          <el-input v-model="data.apiConfig.model" placeholder="Please enter the model name" />
         </el-form-item>
-        <el-form-item label="API密钥">
-          <el-input v-model="apiConfig.apiKey" type="password" placeholder="请输入API密钥" show-password />
+        <el-form-item label="API Key">
+          <el-input v-model="data.apiConfig.apiKey" type="password" placeholder="Please enter the API key(Stored Locally)" show-password />
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="showApiConfig = false">取消</el-button>
+          <el-button @click="data.showApiConfig = false">取消</el-button>
           <el-button type="primary" @click="saveApiConfig">保存</el-button>
-          <el-button type="info" @click="testConnection" :loading="testingApi">连接测试</el-button>
-          <el-button type="success" @click="runApiTest" :loading="testingApi">Hello测试</el-button>
+          <el-button type="info" @click="testConnection" :loading="data.testingApi">连接测试</el-button>
+          <el-button type="success" @click="runApiTest" :loading="data.testingApi">Hello测试</el-button>
         </span>
       </template>
     </el-dialog>
@@ -285,7 +292,7 @@
       class="settings-button"
       type="primary"
       circle
-      @click="showApiConfig = true"
+      @click="data.showApiConfig = true"
     >
       <el-icon><Setting /></el-icon>
     </el-button>
@@ -293,55 +300,64 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, reactive } from 'vue'
 import { Delete, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ApiService from '@/services/apiService'
+import { languageConfig } from '../config/prompts'
 
-const inputText = ref('')
-const selectedLanguage = ref('')
-const targetLanguages = ref([])
-const detectedLanguage = ref(null)
-const translating = ref(false)
-const showResults = ref(false)
-const translationResults = ref([])
-const translationProgress = ref(0)
-const showRawResponseDialog = ref(false)
-const currentRawResponse = ref(null)
+const data = reactive({
+  // 输入相关
+  inputText: '',
+  selectedLanguage: '',
+  targetLanguages: [],
+  detectedLanguage: null,
+  userNativeLanguage: localStorage.getItem('userNativeLanguage') || 'en',
 
-// API配置相关
-const showApiConfig = ref(false)
-const apiConfig = ref({
-  apiKey: '',
-  apiEndpoint: '',
-  model: ''
+  // 翻译状态
+  translating: false,
+  showResults: false,
+  translationResults: {},
+
+  // API 配置
+  apiConfig: {
+    apiEndpoint: '',
+    apiKey: '',
+    model: ''
+  },
+  apiService: null,
+  testingApi: false,
+
+  // 对话框状态
+  showApiConfig: false,
+  showRawResponseDialog: false,
+  currentRawResponse: null
 })
-const apiService = ref(null)
-const testingApi = ref(false)
-const testResult = ref(null)
 
 const availableLanguages = [
-  { value: 'zh', label: '中文' },
-  { value: 'en', label: '英语' },
-  { value: 'ja', label: '日语' },
-  { value: 'ko', label: '韩语' },
-  { value: 'ru', label: '俄语' }
+  { value: 'zh', label: 'Chinese' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'fr', label: 'French' }
 ]
 
 const getLanguageLabel = (lang) => {
   const labels = {
-    zh: '中文',
-    en: '英语',
-    ja: '日语',
-    ko: '韩语',
-    ru: '俄语'
+    zh: 'Chinese',
+    en: 'English',
+    ja: 'Japanese',
+    ko: 'Korean',
+    ru: 'Russian',
+    fr: 'French'
   }
   return labels[lang] || lang
 }
 
 const showRawResponse = (rawResponses) => {
-  currentRawResponse.value = rawResponses
-  showRawResponseDialog.value = true
+  data.currentRawResponse = rawResponses
+  data.showRawResponseDialog = true
 }
 
 const formatJSON = (json) => {
@@ -360,36 +376,44 @@ const progressFormat = (percentage) => {
   return `翻译中 ${percentage}%`
 }
 
-// 从localStorage加载API配置
+// 从localStorage载API配置
 onMounted(() => {
+  const savedNativeLanguage = localStorage.getItem('userNativeLanguage')
+  if (savedNativeLanguage) {
+    data.userNativeLanguage = savedNativeLanguage
+  } else {
+    data.userNativeLanguage = 'en'
+    localStorage.setItem('userNativeLanguage', 'en')
+  }
+
   const savedConfig = localStorage.getItem('translatorApiConfig')
   if (savedConfig) {
     try {
-      apiConfig.value = JSON.parse(savedConfig)
-      apiService.value = new ApiService(apiConfig.value)
+      data.apiConfig = JSON.parse(savedConfig)
+      data.apiService = new ApiService(data.apiConfig)
     } catch (error) {
-      console.error('加载API配置失败:', error)
+      console.error('Failed to load API config:', error)
     }
   }
 })
 
 const saveApiConfig = () => {
-  localStorage.setItem('translatorApiConfig', JSON.stringify(apiConfig.value))
-  apiService.value = new ApiService(apiConfig.value)
-  showApiConfig.value = false
+  localStorage.setItem('translatorApiConfig', JSON.stringify(data.apiConfig))
+  data.apiService = new ApiService(data.apiConfig)
+  data.showApiConfig = false
   ElMessage.success('配置已保存')
 }
 
 // API测试功能
 async function runApiTest() {
-  if (!apiService.value) {
+  if (!data.apiService) {
     ElMessage.error('请先配置API')
     return
   }
   
-  testingApi.value = true
+  data.testingApi = true
   try {
-    const result = await apiService.value.apitest()
+    const result = await data.apiService.apitest()
     ElMessage.success('API测试成功！')
     ElMessage({
       message: result,
@@ -399,121 +423,224 @@ async function runApiTest() {
   } catch (error) {
     ElMessage.error('API测试失败：' + error.message)
   } finally {
-    testingApi.value = false
+    data.testingApi = false
   }
 }
 
 // 连接测试
 async function testConnection() {
-  if (!apiService.value) {
+  if (!data.apiService) {
     ElMessage.error('请先配置API')
     return
   }
 
-  testingApi.value = true
+  data.testingApi = true
   try {
-    await apiService.value.callLLM('test')
+    await data.apiService.callLLM('test')
     ElMessage.success('连接测试成功！')
   } catch (error) {
     ElMessage.error('连接测试失败：' + error.message)
   } finally {
-    testingApi.value = false
+    data.testingApi = false
   }
 }
 
 const clearInput = () => {
-  inputText.value = ''
-  showResults.value = false
-  translationResults.value = []
-  detectedLanguage.value = null
+  data.inputText = ''
+  data.showResults = false
+  data.translationResults = {}
+  data.detectedLanguage = null
 }
 
 const useDetectedLanguage = () => {
-  if (detectedLanguage.value) {
-    selectedLanguage.value = detectedLanguage.value
-    // 自动选择除了源语言之外的所有目标语言
-    targetLanguages.value = availableLanguages
+  if (data.detectedLanguage) {
+    data.selectedLanguage = data.detectedLanguage
+    // 自动选择除源语言之外的所有目标语言
+    data.targetLanguages = availableLanguages
       .map(lang => lang.value)
-      .filter(lang => lang !== detectedLanguage.value)
+      .filter(lang => lang !== data.detectedLanguage)
   }
 }
 
 const translate = async () => {
-  if (!inputText.value.trim()) {
-    ElMessage.warning('请输入要翻译的文本')
+  if (!data.inputText) {
+    ElMessage.warning(data.userNativeLanguage === 'ja' ? 'テキストを入力してください' : '请输入要翻译的文本')
     return
   }
 
-  if (!apiConfig.value.apiKey) {
-    ElMessage.warning('请先配置API密钥')
-    showApiConfig.value = true
+  if (!data.apiService) {
+    ElMessage.warning(data.userNativeLanguage === 'ja' ? 'APIを設定してください' : '请先配置API')
+    data.showApiConfig = true
     return
   }
 
-  translating.value = true
-  translationProgress.value = 0
-  showResults.value = true
-
+  data.translating = true
+  data.showResults = true
+  
   try {
     // 如果没有选择源语言，先进行语言检测
-    if (!selectedLanguage.value) {
-      detectedLanguage.value = await apiService.value.detectLanguage(inputText.value)
-      selectedLanguage.value = detectedLanguage.value
+    const sourceLanguage = data.selectedLanguage || await data.apiService.detectLanguage(data.inputText)
+    
+    // 使用选中的目标语言
+    if (data.targetLanguages.length === 0) {
+      ElMessage.warning(data.userNativeLanguage === 'ja' ? '翻訳先の言語を選択してください' : '请选择目标语言')
+      return
     }
 
-    // 准备翻译结果数组
-    translationResults.value = targetLanguages.value.map(lang => ({
-      lang,
-      loading: true,
-      data: null,
-      error: null
-    }))
-
-    const progressIncrement = 100 / targetLanguages.value.length
-    const translations = targetLanguages.value.map(async (targetLang, index) => {
-      try {
-        const result = await apiService.value.translate(
-          inputText.value,
-          selectedLanguage.value,
-          targetLang
-        )
-        
-        translationResults.value[index] = {
-          lang: targetLang,
-          loading: false,
-          data: result,
-          error: null
-        }
-      } catch (error) {
-        translationResults.value[index] = {
-          lang: targetLang,
-          loading: false,
-          data: null,
-          error: error.message
-        }
-      } finally {
-        translationProgress.value = Math.min(
-          100,
-          translationProgress.value + progressIncrement
-        )
-      }
-    })
-
-    await Promise.all(translations)
+    data.translationResults = await data.apiService.translateText(
+      data.inputText,
+      sourceLanguage,
+      data.targetLanguages,
+      data.userNativeLanguage
+    )
   } catch (error) {
-    ElMessage.error('翻译过程出错: ' + error.message)
+    console.error('翻译失败:', error)
+    ElMessage.error(error.message || '翻译失败')
   } finally {
-    translating.value = false
-    translationProgress.value = 100
+    data.translating = false
   }
+}
+
+const getFuriganaForChar = (annotations, index) => {
+  if (!annotations) return null
+  return annotations.find(a => 
+    index >= a.position[0] && index < a.position[1]
+  )?.reading || null
+}
+
+// 更新用户母语设置
+const updateUserNativeLanguage = (lang) => {
+  data.userNativeLanguage = lang
+  localStorage.setItem('userNativeLanguage', lang)
+}
+
+// 界面文本配置
+const interfaceText = {
+  en: {
+    nativeLanguage: 'Native Language',
+    sourceLanguage: 'Source Language',
+    targetLanguages: 'Target Languages',
+    selectNativeLanguage: 'Select your native language',
+    selectSourceLanguage: 'Select source language',
+    detectedLanguage: 'Detected Language',
+    selectAll: 'Select All',
+    translate: 'Translate',
+    translating: 'Translating...',
+    completed: 'Completed',
+    partOfSpeech: 'Part of Speech',
+    meaning: 'Meaning',
+    usage: 'Usage',
+    examples: 'Examples',
+    original: 'Original',
+    translation: 'Translation',
+    explanation: 'Explanation',
+    pronunciationGuide: 'Pronunciation Guide',
+    ipaSymbols: 'IPA Symbols',
+    pronunciation: 'Pronunciation',
+    romajiReading: 'Romaji Reading',
+    pronunciationNotes: 'Pronunciation Notes',
+    synonyms: 'Synonyms',
+    antonyms: 'Antonyms',
+    etymology: 'Etymology',
+    register: 'Register',
+    culturalNotes: 'Cultural Notes',
+    notes: 'Notes',
+    viewAiAnalysis: 'View AI Analysis',
+    aiAnalysisDetails: 'AI Analysis Details',
+    basicTranslation: 'Basic Translation',
+    pronunciationAnalysis: 'Pronunciation Analysis',
+    grammarAnalysis: 'Grammar Analysis',
+    usageAnalysis: 'Usage Analysis',
+    englishRomaji: 'English Romaji',
+  },
+  zh: {
+    nativeLanguage: '您的母语',
+    sourceLanguage: '源语言',
+    targetLanguages: '目标语言',
+    selectNativeLanguage: '选择您的母语',
+    selectSourceLanguage: '选择源语言',
+    detectedLanguage: '检测到语言',
+    selectAll: '全部勾选',
+    translate: '翻译',
+    translating: '翻译中...',
+    completed: '完成',
+    partOfSpeech: '词性',
+    meaning: '释义',
+    usage: '用法',
+    examples: '例句',
+    original: '原文',
+    translation: '译文',
+    explanation: '说明',
+    pronunciationGuide: '发音指南',
+    ipaSymbols: 'IPA音标',
+    pronunciation: '发音',
+    romajiReading: '罗马音',
+    pronunciationNotes: '发音要点',
+    synonyms: '同义词',
+    antonyms: '反义词',
+    etymology: '词源',
+    register: '使用场合',
+    culturalNotes: '文化背景',
+    notes: '注释',
+    viewAiAnalysis: '查看AI分析',
+    aiAnalysisDetails: 'AI分析详情',
+    basicTranslation: '基本翻译',
+    pronunciationAnalysis: '发音分析',
+    grammarAnalysis: '语法分析',
+    usageAnalysis: '用法分析',
+    englishRomaji: '英式罗马音',
+  },
+  ja: {
+    nativeLanguage: '母語',
+    sourceLanguage: '原語',
+    targetLanguages: '対象言語',
+    selectNativeLanguage: '母語を選択',
+    selectSourceLanguage: '原語を選択',
+    detectedLanguage: '検出された言語',
+    selectAll: '全て選択',
+    translate: '翻訳',
+    translating: '翻訳中...',
+    completed: '完了',
+    partOfSpeech: '品詞',
+    meaning: '意味',
+    usage: '用法',
+    examples: '例文',
+    original: '原文',
+    translation: '訳文',
+    explanation: '説明',
+    pronunciationGuide: '発音ガイド',
+    ipaSymbols: 'IPA発音記号',
+    pronunciation: '発音',
+    romajiReading: 'ローマ字',
+    pronunciationNotes: '発音のポイント',
+    synonyms: '同義語',
+    antonyms: '対義語',
+    etymology: '語源',
+    register: '使用場面',
+    culturalNotes: '文化的背景',
+    notes: '注釈',
+    viewAiAnalysis: 'AI分析を見る',
+    aiAnalysisDetails: 'AI分析の詳細',
+    basicTranslation: '基本翻訳',
+    pronunciationAnalysis: '発音分析',
+    grammarAnalysis: '文法分析',
+    usageAnalysis: '用法分析',
+    englishRomaji: '英式ローマ字',
+  }
+}
+
+// 获取界面文本
+const getInterfaceText = (key) => {
+  const lang = data.userNativeLanguage || 'en'
+  return interfaceText[lang]?.[key] || interfaceText.en[key]
 }
 </script>
 
 <style scoped>
 .translator {
-  padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .input-card {
@@ -521,19 +648,52 @@ const translate = async () => {
 }
 
 .language-controls {
-  margin-top: 15px;
+  margin: 20px 0;
+}
+
+.language-selection-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.native-language,
+.source-language {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
+}
+
+.language-select {
+  width: 200px;
 }
 
 .target-languages {
-  flex-grow: 1;
+  margin-top: 20px;
+}
+
+.language-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.language-checkbox {
+  margin-right: 0 !important;
+}
+
+.detected-language {
+  margin: 10px 0;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .translate-button {
-  margin-top: 15px;
   width: 100%;
+  margin-top: 20px;
 }
 
 .results-grid {
@@ -572,25 +732,55 @@ const translate = async () => {
 }
 
 .pronunciation-info {
-  margin: 10px 0;
-  padding: 10px;
-  background: #f8f9fa;
-  border-radius: 6px;
+  margin: 1rem 0;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.word-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.5rem;
 }
 
 .word-segment {
-  display: inline-block;
-  margin-right: 10px;
-  margin-bottom: 5px;
+  background-color: white;
+  padding: 0.5rem;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.segment-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .word {
+  font-size: 1.1em;
   font-weight: bold;
 }
 
-.reading {
-  font-size: 0.9em;
+.reading, .pinyin, .romaji {
   color: #666;
+  font-size: 0.9em;
+}
+
+.pitch-accent, .tone, .guide {
+  color: #888;
+  font-size: 0.8em;
+  font-style: italic;
+}
+
+.pronunciation-text, .intonation-text, .notes-text {
+  color: #444;
+  line-height: 1.5;
+}
+
+.native-pronunciation, .romanized-pronunciation, .intonation, .pronunciation-notes {
+  margin-bottom: 0.5rem;
 }
 
 .grammar-analysis,
@@ -757,5 +947,202 @@ h4 {
 :deep(.el-descriptions__label) {
   width: 100px;
   color: #606266;
+}
+
+.annotated-text {
+  font-size: 1.2em;
+  line-height: 2.5;
+  margin: 1rem 0;
+}
+
+ruby {
+  ruby-align: center;
+}
+
+rt {
+  font-size: 0.6em;
+  color: #666;
+  font-weight: normal;
+  text-align: center;
+}
+
+.detailed-explanation {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.detailed-explanation h5 {
+  margin: 1.5rem 0 1rem;
+  color: #2c3e50;
+  font-size: 1.1em;
+}
+
+.word-choice-card {
+  margin-bottom: 1rem;
+}
+
+.word-header {
+  font-size: 1.1em;
+  margin-bottom: 0.5rem;
+}
+
+.word-explanation {
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.word-alternatives {
+  margin: 0.5rem 0;
+}
+
+.alternatives-label {
+  color: #666;
+  margin-bottom: 0.3rem;
+}
+
+.alternative-tag {
+  margin-right: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.word-nuance {
+  margin-top: 0.5rem;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.nuance-label {
+  color: #409EFF;
+  margin-bottom: 0.2rem;
+}
+
+.point-explanation {
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.point-examples {
+  margin-top: 0.5rem;
+}
+
+.examples-label {
+  color: #409EFF;
+  margin-bottom: 0.3rem;
+}
+
+.point-examples ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #666;
+}
+
+.point-examples li {
+  margin-bottom: 0.3rem;
+}
+
+:deep(.el-collapse-item__header) {
+  font-size: 1em;
+  color: #409EFF;
+}
+
+:deep(.el-collapse-item__content) {
+  padding: 1rem;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.translation-item {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.main-translation {
+  margin-bottom: 1rem;
+}
+
+.main-translation h2 {
+  margin: 0;
+  font-size: 1.5em;
+  color: #2c3e50;
+}
+
+.japanese-reading {
+  margin-top: 0.5rem;
+  font-size: 1.1em;
+  line-height: 1.8;
+}
+
+.japanese-text {
+  margin-bottom: 0.5rem;
+}
+
+.romaji {
+  color: #666;
+  font-size: 0.9em;
+  margin-top: 0.3rem;
+}
+
+ruby {
+  ruby-align: center;
+  margin: 0 1px;
+}
+
+rt {
+  font-size: 0.7em;
+  color: #666;
+  line-height: 1.2;
+}
+
+.japanese-example {
+  display: inline-block;
+  line-height: 2;
+}
+
+.romaji-pronunciation {
+  margin-top: 0.5rem;
+}
+
+.romaji-text {
+  font-family: 'Noto Sans', sans-serif;
+  color: #2c3e50;
+}
+
+/* 调整AI分析对话框的样式 */
+.el-dialog :deep(.el-dialog__body) {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.el-tabs :deep(.el-tab-pane) {
+  padding: 1rem;
+  background-color: #fff;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.raw-response pre {
+  margin: 0;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.english-romaji-pronunciation {
+  margin-top: 0.5rem;
+}
+
+.english-romaji-text {
+  font-family: 'Noto Sans', sans-serif;
+  color: #2c3e50;
+  font-style: italic;
 }
 </style>
