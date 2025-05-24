@@ -1,36 +1,60 @@
 import axios from 'axios'
 import { getTranslationPrompt, getPronunciationAnalysisPrompt, getGrammarAnalysisPrompt, getUsageAnalysisPrompt } from '../config/prompts'
+import CerebrasService from './cerebrasService'
+import GeminiService from './geminiService'
+import OpenRouterService from './openrouterService'
 
 class ApiService {
   constructor(config) {
     this.config = config
+    this.provider = this.initializeProvider(config)
+  }
+
+  initializeProvider(config) {
+    switch (config.provider) {
+      case 'cerebras':
+        return new CerebrasService(config)
+      case 'gemini':
+        return new GeminiService(config)
+      case 'openrouter':
+        return new OpenRouterService(config)
+      case 'openai':
+      default:
+        return this // 使用当前类的 OpenAI 实现
+    }
   }
 
   async detectLanguage(text) {
     if (!text) return null
 
     try {
-      const prompt = `请仔细分析以下文本的语言特征，判断最可能的语言。
-如果文本中包含多种语言，请识别主要语言。
-分析特征包括：文字系统、语法特点、标点符号等。
+      const prompt = `Please carefully analyze the language features of the following text and determine the most likely language.
+If the text contains multiple languages, please identify the main language.
+Analysis features include: writing system, grammar features, punctuation marks, etc.
 
-文本：${text}
+Text: ${text}
 
-请直接返回对应的语言代码：
-- 中文(含简体和繁体)：zh
-- 英语：en
-- 日语：ja
-- 韩语：ko
-- 俄语：ru
-- 法语：fr
+Please directly return the corresponding language code:
+- Chinese (including Simplified and Traditional): zh
+- English: en
+- Japanese: ja
+- Korean: ko
+- Russian: ru
+- French: fr
+- German: de
+- Spanish: es
+- Italian: it
+- Portuguese: pt
+- Arabic: ar
+- Hindi: hi
 
-只返回语言代码，不要其他解释。`
+Please return only the language code, no other explanation.`;
 
       const response = await this.callLLM(prompt)
       const lang = response.trim().toLowerCase().replace(/[^a-z]/g, '')
       
       // 验证语言代码
-      if (['zh', 'en', 'ja', 'ko', 'ru', 'fr'].includes(lang)) {
+      if (['zh', 'en', 'ja', 'ko', 'ru', 'fr', 'de', 'es', 'it', 'pt', 'ar', 'hi'].includes(lang)) {
         return lang
       }
       
@@ -40,7 +64,13 @@ class ApiService {
         ko: /[\uAC00-\uD7AF\u1100-\u11FF]/, // 谚文音节和谚文字母
         zh: /[\u4E00-\u9FFF]/, // 汉字
         ru: /[\u0400-\u04FF]/, // 西里尔字母
-        fr: /[àâäéèêëîïôöùûüÿçœæ]/i // 法语特殊字符
+        fr: /[àâäéèêëîïôöùûüÿçœæ]/i, // 法语特殊字符
+        de: /[äöüßÄÖÜ]/i, // 德语特殊字符
+        es: /[ñáéíóúüÑÁÉÍÓÚÜ¿¡]/i, // 西班牙语特殊字符
+        it: /[àèéìíîòóùúÀÈÉÌÍÎÒÓÙÚ]/i, // 意大利语特殊字符
+        pt: /[ãâáàçéêíóôõúüÃÂÁÀÇÉÊÍÓÔÕÚÜ]/i, // 葡萄牙语特殊字符
+        ar: /[\u0600-\u06FF]/, // 阿拉伯字母
+        hi: /[\u0900-\u097F]/ // 天城文字母
       }
 
       for (const [language, pattern] of Object.entries(charPatterns)) {
@@ -52,7 +82,7 @@ class ApiService {
       // 如果都不匹配，默认为英语
       return 'en'
     } catch (error) {
-      console.error('语言检测失败:', error)
+      console.error('Language detection failed:', error)
       return 'en'
     }
   }
@@ -71,7 +101,19 @@ class ApiService {
       // 俄文句子结尾
       ru: /[.!?]$/,
       // 法文句子结尾
-      fr: /[.!?]$/
+      fr: /[.!?]$/,
+      // 德文句子结尾
+      de: /[.!?]$/,
+      // 西班牙文句子结尾
+      es: /[.!?¿¡]$/,
+      // 意大利文句子结尾
+      it: /[.!?]$/,
+      // 葡萄牙文句子结尾
+      pt: /[.!?]$/,
+      // 阿拉伯文句子结尾
+      ar: /[.!?؟]$/,
+      // 印地文句子结尾
+      hi: /[.!?।]$/
     }
 
     // 检查基本句子特征
@@ -86,7 +128,7 @@ class ApiService {
 
   async translate(text, sourceLanguage, targetLanguage, userNativeLanguage = 'zh') {
     if (!text || !sourceLanguage || !targetLanguage) {
-      throw new Error('缺少必要的翻译参数')
+      throw new Error('Missing required translation parameters')
     }
 
     const isSentence = this.isSentence(text)
@@ -111,7 +153,7 @@ class ApiService {
         results.analysis = basicData.analysis
         results.detailed_explanation = basicData.detailed_explanation
       } catch (error) {
-        console.debug('基本翻译���析失败:', error)
+        console.debug('Basic translation parsing failed:', error)
         results.text = basicResponse.trim()
       }
       results.rawResponses.basic = basicResponse
@@ -123,7 +165,7 @@ class ApiService {
           results.furigana = furiganaResult
           results.rawResponses.furigana = JSON.stringify(furiganaResult)
         } catch (error) {
-          console.debug('注音获取失败:', error)
+          console.debug('Furigana retrieval failed:', error)
         }
       }
 
@@ -137,7 +179,7 @@ class ApiService {
           results.pronunciation = pronunciationData.pronunciation
           results.rawResponses.pronunciation = pronunciationResponse
         } catch (error) {
-          console.debug('发音分析失败:', error)
+          console.debug('Pronunciation analysis failed:', error)
         }
 
         // 步骤3：语法分析
@@ -148,7 +190,7 @@ class ApiService {
           results.grammar = grammarData.grammar
           results.rawResponses.grammar = grammarResponse
         } catch (error) {
-          console.debug('语法分析失败:', error)
+          console.debug('Grammar analysis failed:', error)
         }
 
         // 步骤4：用法分析
@@ -159,14 +201,14 @@ class ApiService {
           results.usage = usageData.usage
           results.rawResponses.usage = usageResponse
         } catch (error) {
-          console.debug('用法分析失败:', error)
+          console.debug('Usage analysis failed:', error)
         }
       }
 
       return results
     } catch (error) {
-      console.error('翻译过程出错:', error)
-      throw new Error('翻译失败: ' + error.message)
+      console.error('Translation process error:', error)
+      throw new Error('Translation failed: ' + error.message)
     }
   }
 
@@ -204,7 +246,7 @@ class ApiService {
   "text": "原文",
   "annotations": [
     {
-      "text": "要标注的字/词",
+      "text": "要标注的字",
       "reading": "拼音",
       "position": [起始位置, 结束位置]
     }
@@ -215,7 +257,7 @@ class ApiService {
       const response = await this.callLLM(prompt)
       return JSON.parse(response)
     } catch (error) {
-      console.error('注音获取失败:', error)
+      console.debug('注音获取失败:', error)
       return null
     }
   }
@@ -303,13 +345,19 @@ class ApiService {
   }
 
   async callLLM(prompt) {
+    // 如果使用的是其他提供商，委托给相应的服务
+    if (this.config.provider !== 'openai' && this.provider !== this) {
+      return await this.provider.callLLM(prompt);
+    }
+
+    // OpenAI 实现
     try {
       const response = await axios.post(this.config.apiEndpoint, {
         model: this.config.model || 'gpt-3.5-turbo',
         messages: [
           {
             role: 'system',
-            content: '你是一个专业的多语言翻译助手。请始终以有效的JSON格式返回响应，确保响应可以被JSON.parse()正确解析。'
+            content: 'You are a professional multi-language translation assistant. Please always return the response in valid JSON format and ensure it can be correctly parsed by JSON.parse().'
           },
           {
             role: 'user',
@@ -333,23 +381,29 @@ class ApiService {
           const jsonContent = JSON.parse(jsonStr)
           return JSON.stringify(jsonContent)
         } catch (parseError) {
-          console.debug('JSON解析失败:', parseError)
+          console.debug('JSON parsing failed:', parseError)
           // 如果不是有效的 JSON，返回基本格式
           return JSON.stringify({ text: content })
         }
       }
 
-      throw new Error('API返回格式错误')
+      throw new Error('Invalid API response format')
     } catch (error) {
       if (error.response) {
-        console.error('API错误详情:', error.response.data)
-        throw new Error(`API请求失败: ${error.response.data.error?.message || JSON.stringify(error.response.data)}`)
+        console.error('API error details:', error.response.data)
+        throw new Error(`API request failed: ${error.response.data.error?.message || JSON.stringify(error.response.data)}`)
       }
       throw error
     }
   }
 
   async apitest() {
+    // 如果使用的是其他提供商，委托给相应的服务
+    if (this.config.provider !== 'openai' && this.provider !== this) {
+      return await this.provider.apitest();
+    }
+
+    // OpenAI 实现
     const messages = [
       {
         role: "user",
@@ -372,17 +426,23 @@ class ApiService {
 
       return response.data.choices[0].message.content;
     } catch (error) {
-      console.error('API测试失败:', error);
+      console.error('API test failed:', error);
       throw error;
     }
   }
 
   async testConnection() {
+    // 如果使用的是其他提供商，委托给相应的服务
+    if (this.config.provider !== 'openai' && this.provider !== this) {
+      return await this.provider.testConnection();
+    }
+
+    // OpenAI 实现
     try {
       const response = await this.callLLM('请用中文回复："连接测试成功"')
       return response.includes('连接测试成功')
     } catch (error) {
-      console.error('API连接测试失败:', error)
+      console.error('API connection test failed:', error)
       return false
     }
   }
@@ -406,7 +466,7 @@ class ApiService {
           try {
             translationData = JSON.parse(response);
           } catch (error) {
-            console.error('JSON解析失败:', error);
+            console.error('JSON parsing failed:', error);
             translationData = { text: response };
           }
           
@@ -428,8 +488,8 @@ class ApiService {
       
       return results;
     } catch (error) {
-      console.error('翻译过程出错:', error);
-      throw new Error('翻译失败: ' + error.message);
+      console.error('Translation process error:', error);
+      throw new Error('Translation failed: ' + error.message);
     }
   }
   
@@ -439,7 +499,7 @@ class ApiService {
       const response = await this.callLLM(prompt);
       return JSON.parse(response);
     } catch (error) {
-      console.error('发音分析失败:', error);
+      console.error('Pronunciation analysis failed:', error);
       throw error;
     }
   }
@@ -450,7 +510,7 @@ class ApiService {
       const response = await this.callLLM(prompt);
       return JSON.parse(response);
     } catch (error) {
-      console.error('语法分析失败:', error);
+      console.error('Grammar analysis failed:', error);
       throw error;
     }
   }
@@ -461,9 +521,23 @@ class ApiService {
       const response = await this.callLLM(prompt);
       return JSON.parse(response);
     } catch (error) {
-      console.error('用法分析失败:', error);
+      console.error('Usage analysis failed:', error);
       throw error;
     }
+  }
+
+  // 获取推荐模型列表
+  getRecommendedModels() {
+    if (this.provider && this.provider.getRecommendedModels) {
+      return this.provider.getRecommendedModels();
+    }
+    
+    // 默认 OpenAI 模型
+    return [
+      'gpt-4o',
+      'gpt-4-turbo',
+      'gpt-3.5-turbo'
+    ];
   }
 }
 

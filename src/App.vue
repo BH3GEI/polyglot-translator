@@ -1,7 +1,7 @@
 <template>
   <div class="app-container">
     <header>
-      <h1>多语言翻译器 / Multilingual Translator / 多言語翻訳 / Многоязычный переводчик</h1>
+      <h1>Multilingual Translator</h1>
     </header>
     <main>
       <TranslatorComponent />

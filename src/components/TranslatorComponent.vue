@@ -1,6 +1,6 @@
 <template>
   <div class="translator">
-    <!-- 输入部分 -->
+    <!-- Input Section -->
     <el-card class="input-card">
       <el-input
         v-model="data.inputText"
@@ -17,7 +17,7 @@
       </el-input>
 
       <div class="language-controls">
-        <!-- 用户母语选择 -->
+        <!-- Native Language Selection -->
         <div class="language-selection-row">
           <div class="native-language">
             <label>{{ getInterfaceText('nativeLanguage') }}</label>
@@ -54,7 +54,7 @@
           </div>
         </div>
 
-        <!-- 检测到的语言 -->
+        <!-- Detected Language -->
         <div class="detected-language" v-if="data.detectedLanguage">
           {{ getInterfaceText('detectedLanguage') }}: {{ getLanguageLabel(data.detectedLanguage) }}
           <el-button type="text" @click="useDetectedLanguage">
@@ -62,7 +62,7 @@
           </el-button>
         </div>
 
-        <!-- 目标语言选择 -->
+        <!-- Target Language Selection -->
         <div class="target-languages">
           <label>{{ getInterfaceText('targetLanguages') }}</label>
           <el-checkbox-group v-model="data.targetLanguages" class="language-checkbox-group">
@@ -85,11 +85,11 @@
         :disabled="!data.inputText || (!data.selectedLanguage && !data.detectedLanguage) || data.targetLanguages.length === 0"
         class="translate-button"
       >
-        {{ data.userNativeLanguage === 'ja' ? '翻訳' : '翻译' }}
+        Translate
       </el-button>
     </el-card>
 
-    <!-- 翻译进度 -->
+    <!-- Translation Progress -->
     <div v-if="data.translating" class="translation-progress">
       <el-progress 
         :percentage="data.translationProgress" 
@@ -99,7 +99,7 @@
       />
     </div>
 
-    <!-- 翻译结果 -->
+    <!-- Translation Results -->
     <div v-if="data.showResults" class="results-grid">
       <el-card v-for="result in data.translationResults" :key="result.lang" class="result-card">
         <div class="result-header">
@@ -110,22 +110,22 @@
               type="text"
               @click="showRawResponse(result.data)"
             >
-              {{ data.userNativeLanguage === 'ja' ? '' : '' }}
+              View Analysis
             </el-button>
             <el-tag v-if="result.loading" type="info">
-              {{ data.userNativeLanguage === 'ja' ? '翻訳中...' : '翻译中...' }}
+              Translating...
             </el-tag>
             <el-tag v-else-if="result.error" type="danger">{{ result.error }}</el-tag>
           </div>
         </div>
 
         <template v-if="result.data">
-          <!-- 基本翻译 -->
+          <!-- Basic Translation -->
           <div v-if="result.data.translations" class="translation-text">
             <div v-for="(translation, index) in result.data.translations" :key="index" class="translation-item">
               <div class="main-translation">
                 <h2>{{ translation.text }}</h2>
-                <!-- 日语注音支持 -->
+                <!-- Japanese reading support -->
                 <div v-if="result.lang === 'ja'" class="japanese-reading">
                   <div v-if="translation.text.match(/[ぁ-んァ-ン]/)" class="japanese-text">
                     <ruby v-for="(char, idx) in translation.text" :key="idx">
@@ -145,7 +145,7 @@
                 <div class="meaning"><strong>{{ getInterfaceText('meaning') }}：</strong>{{ translation.meaning }}</div>
                 <div class="usage"><strong>{{ getInterfaceText('usage') }}：</strong>{{ translation.usage }}</div>
                 
-                <!-- 示例部分 -->
+                <!-- Examples Section -->
                 <div v-if="translation.examples && translation.examples.length" class="examples">
                   <strong class="section-title">{{ getInterfaceText('examples') }}：</strong>
                   <div v-for="(example, exIndex) in translation.examples" :key="exIndex" class="example-item">
@@ -169,7 +169,7 @@
             </div>
           </div>
 
-          <!-- 发音信息 -->
+          <!-- Pronunciation Information -->
           <div v-if="result.data.pronunciation" class="pronunciation-info">
             <div class="pronunciation-header">
               <strong class="section-title">{{ getInterfaceText('pronunciationGuide') }}</strong>
@@ -196,7 +196,7 @@
             </div>
           </div>
 
-          <!-- 同义词和反义词 -->
+          <!-- Synonyms and Antonyms -->
           <div v-if="result.data.synonyms || result.data.antonyms" class="word-relations">
             <div v-if="result.data.synonyms" class="synonyms">
               <strong>{{ getInterfaceText('synonyms') }}：</strong>
@@ -208,7 +208,7 @@
             </div>
           </div>
 
-          <!-- 附加信息 -->
+          <!-- Additional Information -->
           <div v-if="result.data.additional_info" class="additional-info">
             <div v-if="result.data.additional_info.etymology" class="etymology">
               <strong>{{ getInterfaceText('etymology') }}：</strong>
@@ -224,7 +224,7 @@
             </div>
           </div>
 
-          <!-- 注释 -->
+          <!-- Notes -->
           <div v-if="result.data.notes" class="translation-notes">
             <strong>{{ getInterfaceText('notes') }}：</strong>
             <span class="notes-text">{{ result.data.notes }}</span>
@@ -233,61 +233,95 @@
       </el-card>
     </div>
 
-    <!-- AI响应对话框 -->
+    <!-- AI Response Dialog -->
     <el-dialog
       v-model="data.showRawResponseDialog"
-      title="AI分析详情"
+      title="AI Analysis Details"
       width="80%"
       :close-on-click-modal="false"
     >
       <div v-if="data.currentRawResponse" class="raw-response">
         <el-tabs>
-          <el-tab-pane v-if="data.currentRawResponse.basic" label="基本翻译">
+          <el-tab-pane v-if="data.currentRawResponse.basic" label="Basic Translation">
             <pre>{{ formatJSON(data.currentRawResponse.basic) }}</pre>
           </el-tab-pane>
-          <el-tab-pane v-if="data.currentRawResponse.pronunciation" label="发音分析">
+          <el-tab-pane v-if="data.currentRawResponse.pronunciation" label="Pronunciation Analysis">
             <pre>{{ formatJSON(data.currentRawResponse.pronunciation) }}</pre>
           </el-tab-pane>
-          <el-tab-pane v-if="data.currentRawResponse.grammar" label="语法分析">
+          <el-tab-pane v-if="data.currentRawResponse.grammar" label="Grammar Analysis">
             <pre>{{ formatJSON(data.currentRawResponse.grammar) }}</pre>
           </el-tab-pane>
-          <el-tab-pane v-if="data.currentRawResponse.usage" label="用法分析">
+          <el-tab-pane v-if="data.currentRawResponse.usage" label="Usage Analysis">
             <pre>{{ formatJSON(data.currentRawResponse.usage) }}</pre>
           </el-tab-pane>
         </el-tabs>
       </div>
     </el-dialog>
 
-    <!-- API配置对话框 -->
+    <!-- API Configuration Dialog -->
     <el-dialog
       v-model="data.showApiConfig"
       title="API Configuration"
-      width="500px"
+      width="600px"
       class="modern-dialog"
       :close-on-click-modal="false"
     >
       <el-form>
-        <el-form-item label="API Address">
+        <el-form-item label="API Provider">
+          <el-select v-model="data.apiConfig.provider" placeholder="Select API Provider" @change="onProviderChange">
+            <el-option label="OpenAI" value="openai" />
+            <el-option label="Cerebras" value="cerebras" />
+            <el-option label="Google Gemini" value="gemini" />
+            <el-option label="OpenRouter" value="openrouter" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="API Address" v-if="data.apiConfig.provider === 'openai'">
           <el-input v-model="data.apiConfig.apiEndpoint" placeholder="Please enter the API address" />
         </el-form-item>
         <el-form-item label="Model Name">
-          <el-input v-model="data.apiConfig.model" placeholder="Please enter the model name" />
+          <el-select 
+            v-if="data.apiConfig.provider === 'openrouter' && data.recommendedModels.length > 0"
+            v-model="data.apiConfig.model" 
+            :placeholder="getModelPlaceholder()"
+            filterable
+            allow-create
+          >
+            <el-option-group label="Recommended Models">
+              <el-option
+                v-for="model in data.recommendedModels"
+                :key="model"
+                :label="model"
+                :value="model"
+              />
+            </el-option-group>
+          </el-select>
+          <el-input 
+            v-else
+            v-model="data.apiConfig.model" 
+            :placeholder="getModelPlaceholder()" 
+          />
+        </el-form-item>
+        <el-form-item label="Site URL" v-if="data.apiConfig.provider === 'openrouter'">
+          <el-input v-model="data.apiConfig.siteUrl" placeholder="https://your-site.com (Optional, for OpenRouter ranking)" />
+        </el-form-item>
+        <el-form-item label="Site Title" v-if="data.apiConfig.provider === 'openrouter'">
+          <el-input v-model="data.apiConfig.siteTitle" placeholder="Your Site Name (Optional, for OpenRouter ranking)" />
         </el-form-item>
         <el-form-item label="API Key">
-          <el-input v-model="data.apiConfig.apiKey" type="password" placeholder="Please enter the API key(Stored Locally)" show-password />
+          <el-input v-model="data.apiConfig.apiKey" type="password" placeholder="Please enter the API key (Stored Locally)" show-password />
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="data.showApiConfig = false">取消</el-button>
-          <el-button type="primary" @click="saveApiConfig">保存</el-button>
-          <el-button type="info" @click="testConnection" :loading="data.testingApi">连接测试</el-button>
-          <el-button type="success" @click="runApiTest" :loading="data.testingApi">Hello测试</el-button>
+          <el-button @click="data.showApiConfig = false">Cancel</el-button>
+          <el-button type="primary" @click="saveApiConfig">Save</el-button>
+          <el-button type="info" @click="testConnection" :loading="data.testingApi">Test Connection</el-button>
+          <el-button type="success" @click="runApiTest" :loading="data.testingApi">Hello Test</el-button>
         </span>
       </template>
     </el-dialog>
 
-    <!-- 设置按钮 -->
+    <!-- Settings Button -->
     <el-button
       class="settings-button"
       type="primary"
@@ -323,10 +357,14 @@ const data = reactive({
   apiConfig: {
     apiEndpoint: '',
     apiKey: '',
-    model: ''
+    model: '',
+    provider: 'openai',
+    siteUrl: '',
+    siteTitle: ''
   },
   apiService: null,
   testingApi: false,
+  recommendedModels: [],
 
   // 对话框状态
   showApiConfig: false,
@@ -335,22 +373,34 @@ const data = reactive({
 })
 
 const availableLanguages = [
-  { value: 'zh', label: 'Chinese' },
+  { value: 'zh', label: '中文 (Chinese)' },
   { value: 'en', label: 'English' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'ru', label: 'Russian' },
-  { value: 'fr', label: 'French' }
+  { value: 'ja', label: '日本語 (Japanese)' },
+  { value: 'ko', label: '한국어 (Korean)' },
+  { value: 'ru', label: 'Русский (Russian)' },
+  { value: 'fr', label: 'Français (French)' },
+  { value: 'de', label: 'Deutsch (German)' },
+  { value: 'es', label: 'Español (Spanish)' },
+  { value: 'it', label: 'Italiano (Italian)' },
+  { value: 'pt', label: 'Português (Portuguese)' },
+  { value: 'ar', label: 'العربية (Arabic)' },
+  { value: 'hi', label: 'हिन्दी (Hindi)' }
 ]
 
 const getLanguageLabel = (lang) => {
   const labels = {
-    zh: 'Chinese',
+    zh: '中文 (Chinese)',
     en: 'English',
-    ja: 'Japanese',
-    ko: 'Korean',
-    ru: 'Russian',
-    fr: 'French'
+    ja: '日本語 (Japanese)',
+    ko: '한국어 (Korean)',
+    ru: 'Русский (Russian)',
+    fr: 'Français (French)',
+    de: 'Deutsch (German)',
+    es: 'Español (Spanish)',
+    it: 'Italiano (Italian)',
+    pt: 'Português (Portuguese)',
+    ar: 'العربية (Arabic)',
+    hi: 'हिन्दी (Hindi)'
   }
   return labels[lang] || lang
 }
@@ -372,8 +422,8 @@ const formatJSON = (json) => {
 }
 
 const progressFormat = (percentage) => {
-  if (percentage === 100) return '完成'
-  return `翻译中 ${percentage}%`
+  if (percentage === 100) return 'Completed'
+  return `Translating... ${percentage}%`
 }
 
 // 从localStorage载API配置
@@ -398,30 +448,58 @@ onMounted(() => {
 })
 
 const saveApiConfig = () => {
-  localStorage.setItem('translatorApiConfig', JSON.stringify(data.apiConfig))
-  data.apiService = new ApiService(data.apiConfig)
-  data.showApiConfig = false
-  ElMessage.success('配置已保存')
+  try {
+    // 验证必要的配置
+    if (!data.apiConfig.provider) {
+      ElMessage.error('Please select an API provider')
+      return
+    }
+    
+    if (!data.apiConfig.apiKey) {
+      ElMessage.error('Please enter the API key')
+      return
+    }
+    
+    if (!data.apiConfig.model) {
+      ElMessage.error('Please enter the model name')
+      return
+    }
+    
+    // 保存配置到 localStorage
+    localStorage.setItem('translatorApiConfig', JSON.stringify(data.apiConfig))
+    console.log('Saved configuration:', data.apiConfig)
+    
+    // 创建新的 ApiService 实例
+    data.apiService = new ApiService(data.apiConfig)
+    console.log('Created ApiService provider:', data.apiService.config.provider)
+    
+    // 关闭对话框
+    data.showApiConfig = false
+    ElMessage.success('Configuration saved')
+  } catch (error) {
+    console.error('Failed to save configuration:', error)
+    ElMessage.error('Failed to save configuration: ' + error.message)
+  }
 }
 
 // API测试功能
 async function runApiTest() {
   if (!data.apiService) {
-    ElMessage.error('请先配置API')
+    ElMessage.error('Please configure the API first')
     return
   }
   
   data.testingApi = true
   try {
     const result = await data.apiService.apitest()
-    ElMessage.success('API测试成功！')
+    ElMessage.success('API test succeeded!')
     ElMessage({
       message: result,
       type: 'success',
       duration: 5000
     })
   } catch (error) {
-    ElMessage.error('API测试失败：' + error.message)
+    ElMessage.error('API test failed: ' + error.message)
   } finally {
     data.testingApi = false
   }
@@ -430,16 +508,24 @@ async function runApiTest() {
 // 连接测试
 async function testConnection() {
   if (!data.apiService) {
-    ElMessage.error('请先配置API')
+    ElMessage.error('Please configure the API first')
     return
   }
 
+  console.log('Testing connection provider:', data.apiService.config.provider)
+  console.log('Testing connection configuration:', data.apiService.config)
+
   data.testingApi = true
   try {
-    await data.apiService.callLLM('test')
-    ElMessage.success('连接测试成功！')
+    const result = await data.apiService.testConnection()
+    if (result) {
+      ElMessage.success('Connection test succeeded!')
+    } else {
+      ElMessage.warning('Connection test did not return expected results')
+    }
   } catch (error) {
-    ElMessage.error('连接测试失败：' + error.message)
+    console.error('Connection test failed:', error)
+    ElMessage.error('Connection test failed: ' + error.message)
   } finally {
     data.testingApi = false
   }
@@ -464,12 +550,12 @@ const useDetectedLanguage = () => {
 
 const translate = async () => {
   if (!data.inputText) {
-    ElMessage.warning(data.userNativeLanguage === 'ja' ? 'テキストを入力してください' : '请输入要翻译的文本')
+    ElMessage.warning('Please enter text to translate')
     return
   }
 
   if (!data.apiService) {
-    ElMessage.warning(data.userNativeLanguage === 'ja' ? 'APIを設定してください' : '请先配置API')
+    ElMessage.warning('Please configure the API first')
     data.showApiConfig = true
     return
   }
@@ -483,7 +569,7 @@ const translate = async () => {
     
     // 使用选中的目标语言
     if (data.targetLanguages.length === 0) {
-      ElMessage.warning(data.userNativeLanguage === 'ja' ? '翻訳先の言語を選択してください' : '请选择目标语言')
+      ElMessage.warning('Please select target languages')
       return
     }
 
@@ -494,8 +580,8 @@ const translate = async () => {
       data.userNativeLanguage
     )
   } catch (error) {
-    console.error('翻译失败:', error)
-    ElMessage.error(error.message || '翻译失败')
+    console.error('Translation failed:', error)
+    ElMessage.error(error.message || 'Translation failed')
   } finally {
     data.translating = false
   }
@@ -633,6 +719,75 @@ const interfaceText = {
 const getInterfaceText = (key) => {
   const lang = data.userNativeLanguage || 'en'
   return interfaceText[lang]?.[key] || interfaceText.en[key]
+}
+
+const getModelPlaceholder = () => {
+  const provider = data.apiConfig.provider
+  switch (provider) {
+    case 'cerebras':
+      return 'e.g., qwen-3-32b, llama-4-scout-17b-16e-instruct'
+    case 'gemini':
+      return 'e.g., gemini-2.0-flash, gemini-pro, gemini-pro-vision'
+    case 'openrouter':
+      return 'e.g., qwen/qwen3-32b:free, openai/gpt-4o, anthropic/claude-3-sonnet'
+    case 'openai':
+    default:
+      return 'e.g., gpt-3.5-turbo, gpt-4'
+  }
+}
+
+const onProviderChange = async () => {
+  const provider = data.apiConfig.provider
+  switch (provider) {
+    case 'cerebras':
+      data.apiConfig.apiEndpoint = ''
+      data.apiConfig.model = 'qwen-3-32b'
+      data.apiConfig.siteUrl = ''
+      data.apiConfig.siteTitle = ''
+      data.recommendedModels = []
+      break
+    case 'gemini':
+      data.apiConfig.apiEndpoint = ''
+      data.apiConfig.model = 'gemini-2.0-flash'
+      data.apiConfig.siteUrl = ''
+      data.apiConfig.siteTitle = ''
+      data.recommendedModels = []
+      break
+    case 'openrouter':
+      data.apiConfig.apiEndpoint = ''
+      data.apiConfig.model = 'qwen/qwen3-32b:free'
+      data.apiConfig.siteUrl = ''
+      data.apiConfig.siteTitle = 'Multilingual Translator'
+      // 加载推荐模型
+      data.recommendedModels = [
+        'qwen/qwen3-32b:free',
+        'openai/gpt-4o',
+        'openai/gpt-4-turbo',
+        'openai/gpt-3.5-turbo',
+        'anthropic/claude-3-sonnet',
+        'anthropic/claude-3-haiku',
+        'google/gemini-pro',
+        'meta-llama/llama-3-70b-instruct'
+      ]
+      break
+    case 'openai':
+    default:
+      data.apiConfig.apiEndpoint = 'https://api.openai.com/v1/chat/completions'
+      data.apiConfig.model = 'gpt-3.5-turbo'
+      data.apiConfig.siteUrl = ''
+      data.apiConfig.siteTitle = ''
+      data.recommendedModels = []
+      break
+  }
+  
+  // 立即更新 ApiService 实例以反映提供商的变化
+  if (data.apiConfig.apiKey) {
+    try {
+      data.apiService = new ApiService(data.apiConfig)
+    } catch (error) {
+      console.warn('切换提供商时更新 ApiService 失败:', error)
+    }
+  }
 }
 </script>
 
